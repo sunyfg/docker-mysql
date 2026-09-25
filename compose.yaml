@@ -1,27 +1,39 @@
+# MySQL 8.x 开发/测试环境编排文件
+# 可通过 .env 覆盖配置，见各处 ${VAR:-default} 默认值说明
 name: docker-mysql
 
 services:
   mysql:
+    # 可用 MYSQL_IMAGE 指定镜像版本，默认 mysql:8.4(LTS)
     image: ${MYSQL_IMAGE:-mysql:8.4}
+    # 容器异常退出时自动重启（手动 docker compose stop 除外）
     restart: unless-stopped
     ports:
+      # 宿主机端口可用 MYSQL_PORT 覆盖，默认 3306
       - "${MYSQL_PORT:-3306}:3306"
     environment:
+      # root 密码：必填，无默认值（需在 .env 中设置）
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      # 应用数据库名，默认 app
       MYSQL_DATABASE: ${MYSQL_DATABASE:-app}
+      # 应用专用账号，默认 app（仅有权访问 MYSQL_DATABASE）
       MYSQL_USER: ${MYSQL_USER:-app}
+      # 应用账号密码：必填，无默认值（需在 .env 中设置）
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     volumes:
+      # 命名卷持久化数据，容器删除后数据仍保留（docker volume rm 才会清除）
       - mysql_data:/var/lib/mysql
+      # 初始化 SQL：仅在数据卷首次创建时空库执行；ro 表示只读挂载
       - ./mysql/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       # $$ escapes the $ so Compose doesn't interpolate it;
       # MYSQL_ROOT_PASSWORD is resolved inside the container shell.
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-      start_period: 30s
+      interval: 5s # 每 5 秒探测一次
+      timeout: 5s # 单次探测超时
+      retries: 20 # 连续失败 20 次标记为 unhealthy
+      start_period: 30s # 启动宽限期，期间失败不计入 retries
 
+# 命名卷定义：mysql_data 实际路径由 Compose 管理（docker volume inspect 可查）
 volumes:
   mysql_data:
